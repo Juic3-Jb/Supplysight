@@ -1,10 +1,11 @@
-# [Project name]
+# Global Supply Chain Intelligence Terminal
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A fully offline, client-side simulated CRT/amber "mission control" terminal visualizing global shipping corridors, chokepoints, port risk, commodities, carriers, and news — all data is deterministically generated on the client, no backend or external APIs involved.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/supply-chain-terminal run dev` — run the terminal web app
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000, unused by the terminal)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
