@@ -9,14 +9,34 @@ function makeProj(w: number, h: number, box: number[] | null) {
 function rc(r: string) { return { critical: '#ff3b30', high: '#ff7a1a', medium: '#ffb020', low: '#ffd24a' }[r as string] || '#c98a3a'; }
 function modeColor(m: string) { return { sea: '#ff9020', air: '#ffd24a', rail: '#ff6a3a', river: '#ffb84d', road: '#ff8a4a' }[m as string] || '#ff9020'; }
 
-function smoothPath(ctx: CanvasRenderingContext2D, pts: {x: number, y: number}[]) {
-  if (!pts || !pts.length) return;
-  if (pts.length < 3) {
+// Chaikin corner-cutting: rounds a coarse polygon into a smooth, high-resolution curve
+// by iteratively replacing each vertex with two points closer to its neighbors.
+function chaikinSmooth(pts: {x: number, y: number}[], iterations: number) {
+  let cur = pts;
+  const n0 = cur.length;
+  for (let it = 0; it < iterations; it++) {
+    const next: {x: number, y: number}[] = [];
+    const n = cur.length;
+    for (let i = 0; i < n; i++) {
+      const p0 = cur[i], p1 = cur[(i + 1) % n];
+      next.push({ x: p0.x * 0.75 + p1.x * 0.25, y: p0.y * 0.75 + p1.y * 0.25 });
+      next.push({ x: p0.x * 0.25 + p1.x * 0.75, y: p0.y * 0.25 + p1.y * 0.75 });
+    }
+    cur = next;
+  }
+  return n0 < 3 ? pts : cur;
+}
+
+function smoothPath(ctx: CanvasRenderingContext2D, rawPts: {x: number, y: number}[]) {
+  if (!rawPts || !rawPts.length) return;
+  if (rawPts.length < 3) {
     ctx.beginPath();
-    pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    rawPts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
     ctx.closePath();
     return;
   }
+  // Round the coarse coastline vertices into smooth, flowing curves rather than sharp facets.
+  const pts = chaikinSmooth(rawPts, 2);
   ctx.beginPath();
   const n = pts.length;
   ctx.moveTo((pts[n - 1].x + pts[0].x) / 2, (pts[n - 1].y + pts[0].y) / 2);
