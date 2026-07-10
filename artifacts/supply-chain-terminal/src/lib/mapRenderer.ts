@@ -1,7 +1,9 @@
 import { PORTS, ROUTES, CHOKE_POINTS, REGIONS } from '@/data/geo';
 
 function makeProj(w: number, h: number, box: number[] | null) {
-  if (!box) return (lon: number, lat: number) => ({ x: ((lon + 180) / 360) * w, y: ((90 - lat) / 180) * h });
+  // World view: nudge the whole map down so it isn't crowded against the top edge
+  // now that Antarctica's empty band at the bottom is gone.
+  if (!box) return (lon: number, lat: number) => ({ x: ((lon + 180) / 360) * w, y: ((90 - lat) / 180) * h + h * 0.07 });
   const [loMin, loMax, laMin, laMax] = box;
   return (lon: number, lat: number) => ({ x: ((lon - loMin) / (loMax - loMin)) * w, y: ((laMax - lat) / (laMax - laMin)) * h });
 }
