@@ -27,16 +27,29 @@ function chaikinSmooth(pts: {x: number, y: number}[], iterations: number) {
   return n0 < 3 ? pts : cur;
 }
 
+// Guards against degenerate polygons (near-zero area, e.g. antimeridian slivers from
+// coastline data export) that would otherwise draw as stray lines across the map.
+function isDegenerateRing(pts: {x: number, y: number}[]) {
+  if (pts.length < 3) return true;
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p0 = pts[i], p1 = pts[(i + 1) % pts.length];
+    area += p0.x * p1.y - p1.x * p0.y;
+  }
+  return Math.abs(area / 2) < 0.5;
+}
+
 function smoothPath(ctx: CanvasRenderingContext2D, rawPts: {x: number, y: number}[]) {
-  if (!rawPts || !rawPts.length) return;
+  if (!rawPts || !rawPts.length || isDegenerateRing(rawPts)) return;
   if (rawPts.length < 3) {
     ctx.beginPath();
     rawPts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
     ctx.closePath();
     return;
   }
-  // Round the coarse coastline vertices into smooth, flowing curves rather than sharp facets.
-  const pts = chaikinSmooth(rawPts, 2);
+  // Real coastline data already carries natural detail; a single light pass just
+  // softens pixel-level jaggies without smoothing away authentic geographic shape.
+  const pts = chaikinSmooth(rawPts, 1);
   ctx.beginPath();
   const n = pts.length;
   ctx.moveTo((pts[n - 1].x + pts[0].x) / 2, (pts[n - 1].y + pts[0].y) / 2);
