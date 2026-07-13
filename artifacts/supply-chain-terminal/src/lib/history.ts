@@ -180,6 +180,223 @@ function solidFill(rgb: string) {
   return { fill: { patternType: 'solid' as const, fgColor: { rgb } } };
 }
 
+// ─── Worksheet builders ──────────────────────────────────────────────────────
+
+const SPARK_CHARS = '▁▂▃▄▅▆▇█';
+
+function sparkline(vals: number[]): string {
+  const mn = Math.min(...vals), mx = Math.max(...vals), rng = mx - mn || 1;
+  return vals.map(v => SPARK_CHARS[Math.min(7, Math.floor(((v - mn) / rng) * 8))]).join('');
+}
+
+/** Simple linear regression → slope + intercept */
+function linReg(vals: number[]): { slope: number; intercept: number } {
+  const n = vals.length;
+  const xMean = (n - 1) / 2;
+  const yMean = vals.reduce((a, b) => a + b, 0) / n;
+  const num = vals.reduce((s, y, x) => s + (x - xMean) * (y - yMean), 0);
+  const den = vals.reduce((s, _, x) => s + (x - xMean) ** 2, 0) || 1;
+  const slope = num / den;
+  return { slope, intercept: yMean - slope * xMean };
+}
+
+function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
+
+function hdr(v: string, bgRgb = '1A1208', fgRgb = 'FFC107'): XLSX.CellObject {
+  return { t: 's', v, s: { fill: { patternType: 'solid', fgColor: { rgb: bgRgb } }, font: { bold: true, color: { rgb: fgRgb } } } };
+}
+
+function numCell(v: number, rgb?: string): XLSX.CellObject {
+  const s = rgb ? { fill: { patternType: 'solid' as const, fgColor: { rgb } }, font: { bold: true, color: { rgb: 'FFFFFF' } } } : undefined;
+  return { t: 'n', v, ...(s ? { s } : {}) };
+}
+
+function txtCell(v: string, rgb?: string, italic = false): XLSX.CellObject {
+  const s = rgb ? { fill: { patternType: 'solid' as const, fgColor: { rgb } }, font: { bold: !italic, italic, color: { rgb: 'FFFFFF' } } } : undefined;
+  return { t: 's', v, ...(s ? { s } : {}) };
+}
+
+/** Sheet 2 — metric sparklines + linear-regression forecasts */
+function buildTrendsSheet(history: Snapshot[], wb: XLSX.WorkBook): void {
+  if (history.length < 2) return;
+
+  const METRICS: { key: keyof Snapshot; label: string; maxVal: number; colorFn: (v: number) => string }[] = [
+    { key: 'riskAsia',       label: 'Risk — Asia-Pacific',      maxVal: 100, colorFn: numericRGB },
+    { key: 'riskME',         label: 'Risk — Middle East',       maxVal: 100, colorFn: numericRGB },
+    { key: 'riskAfrica',     label: 'Risk — Africa',            maxVal: 100, colorFn: numericRGB },
+    { key: 'riskAmericas',   label: 'Risk — Americas',          maxVal: 100, colorFn: numericRGB },
+    { key: 'riskOceania',    label: 'Risk — Oceania',           maxVal: 100, colorFn: numericRGB },
+    { key: 'delaySea',       label: 'Delay Index — Ocean',      maxVal: 100, colorFn: numericRGB },
+    { key: 'delayAir',       label: 'Delay Index — Air',        maxVal: 100, colorFn: numericRGB },
+    { key: 'delayRail',      label: 'Delay Index — Rail',       maxVal: 100, colorFn: numericRGB },
+    { key: 'delayRiver',     label: 'Delay Index — River',      maxVal: 100, colorFn: numericRGB },
+    { key: 'commAutos',      label: 'Commodity — Autos',        maxVal: 100, colorFn: numericRGB },
+    { key: 'commRaw',        label: 'Commodity — Raw Materials',maxVal: 100, colorFn: numericRGB },
+    { key: 'commGas',        label: 'Commodity — Nat. Gas',     maxVal: 100, colorFn: numericRGB },
+    { key: 'commFuel',       label: 'Commodity — Fossil Fuels', maxVal: 100, colorFn: numericRGB },
+    { key: 'commGoods',      label: 'Commodity — Consumer',     maxVal: 100, colorFn: numericRGB },
+    { key: 'commAgri',       label: 'Commodity — Agriculture',  maxVal: 100, colorFn: numericRGB },
+    { key: 'carrierAvgCap',  label: 'Carrier Avg Capacity %',   maxVal: 100, colorFn: capacityRGB },
+    { key: 'carrierAvgDelay',label: 'Carrier Avg Delay (days)', maxVal: 30,  colorFn: delayDaysRGB },
+  ];
+
+  const ws: XLSX.WorkSheet = {};
+  const cols = ['Metric', 'Trend (oldest → newest)', 'Latest', 'Min', 'Max', 'Avg', 'Direction', 'Forecast +3', 'Forecast +7'];
+
+  // Title
+  ws[XLSX.utils.encode_cell({ r: 0, c: 0 })] = hdr('📊  Risk & Metric Trends', '0D0A04', 'FFC107');
+  ws[XLSX.utils.encode_cell({ r: 0, c: 1 })] = { t: 's', v: `Linear regression over last ${Math.min(history.length, 20)} snapshots · italic = projected`, s: { font: { italic: true, color: { rgb: '888866' } } } };
+
+  // Column headers
+  cols.forEach((c, ci) => { ws[XLSX.utils.encode_cell({ r: 1, c: ci })] = hdr(c, '2C1C08'); });
+
+  // Data
+  const recent = history.slice(0, Math.min(history.length, 20)).reverse(); // oldest→newest
+
+  METRICS.forEach((m, i) => {
+    const vals = recent.map(s => s[m.key] as number);
+    const latest = vals[vals.length - 1];
+    const mn = Math.min(...vals), mx = Math.max(...vals);
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const { slope, intercept } = linReg(vals);
+    const n = vals.length;
+    const fc3 = parseFloat(clamp(intercept + slope * (n + 2), 0, m.maxVal).toFixed(1));
+    const fc7 = parseFloat(clamp(intercept + slope * (n + 6), 0, m.maxVal).toFixed(1));
+    const dir = slope >  0.8 ? '↑ Rising' : slope < -0.8 ? '↓ Falling' : '→ Stable';
+    const dirRGB = slope >  0.8 ? 'B71C1C' : slope < -0.8 ? '2E7D32' : 'F9A825';
+
+    const r = i + 2;
+    ws[XLSX.utils.encode_cell({ r, c: 0 })] = { t: 's', v: m.label, s: { font: { bold: true } } };
+    ws[XLSX.utils.encode_cell({ r, c: 1 })] = { t: 's', v: sparkline(vals), s: { font: { name: 'Consolas', sz: 9 } } };
+    ws[XLSX.utils.encode_cell({ r, c: 2 })] = numCell(latest, m.colorFn(latest));
+    ws[XLSX.utils.encode_cell({ r, c: 3 })] = numCell(parseFloat(mn.toFixed(1)));
+    ws[XLSX.utils.encode_cell({ r, c: 4 })] = numCell(parseFloat(mx.toFixed(1)));
+    ws[XLSX.utils.encode_cell({ r, c: 5 })] = numCell(parseFloat(avg.toFixed(1)));
+    ws[XLSX.utils.encode_cell({ r, c: 6 })] = txtCell(dir, dirRGB);
+    ws[XLSX.utils.encode_cell({ r, c: 7 })] = { t: 'n', v: fc3, s: { fill: { patternType: 'solid', fgColor: { rgb: m.colorFn(fc3) } }, font: { italic: true, color: { rgb: 'FFFFFF' } } } };
+    ws[XLSX.utils.encode_cell({ r, c: 8 })] = { t: 'n', v: fc7, s: { fill: { patternType: 'solid', fgColor: { rgb: m.colorFn(fc7) } }, font: { italic: true, color: { rgb: 'FFFFFF' } } } };
+  });
+
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: METRICS.length + 1, c: cols.length - 1 } });
+  ws['!cols'] = [{ wch: 30 }, { wch: 22 }, { wch: 8 }, { wch: 7 }, { wch: 7 }, { wch: 7 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Risk Trends');
+}
+
+/** Sheet 3 — event counts, risk-level distribution, chokepoint frequency */
+function buildEventSheet(history: Snapshot[], wb: XLSX.WorkBook): void {
+  if (!history.length) return;
+
+  const ws: XLSX.WorkSheet = {};
+  let row = 0;
+
+  const setCell = (r: number, c: number, cell: XLSX.CellObject) => {
+    ws[XLSX.utils.encode_cell({ r, c })] = cell;
+  };
+
+  // ── Section 1: Risk-level distribution by region ───────────────────────────
+  setCell(row, 0, hdr('📋  Risk-Level Event Distribution', '0D0A04', 'FFC107'));
+  setCell(row, 1, { t: 's', v: `${history.length} total snapshots`, s: { font: { italic: true, color: { rgb: '888866' } } } });
+  row += 2;
+
+  const distCols = ['Region', 'LOW  (≤ 40)', 'MEDIUM (41-70)', 'HIGH  (71-85)', 'CRITICAL (> 85)', '% High/Critical', 'Bar'];
+  distCols.forEach((h, ci) => setCell(row, ci, hdr(h, '2C1C08')));
+  row++;
+
+  const REGIONS = [
+    { key: 'riskAsia',     label: 'Asia-Pacific' },
+    { key: 'riskME',       label: 'Middle East' },
+    { key: 'riskAfrica',   label: 'Africa' },
+    { key: 'riskAmericas', label: 'Americas' },
+    { key: 'riskOceania',  label: 'Oceania' },
+  ] as const;
+
+  REGIONS.forEach(reg => {
+    const vals = history.map(s => s[reg.key as keyof Snapshot] as number);
+    const low    = vals.filter(v => v <= 40).length;
+    const medium = vals.filter(v => v > 40 && v <= 70).length;
+    const high   = vals.filter(v => v > 70 && v <= 85).length;
+    const crit   = vals.filter(v => v > 85).length;
+    const pct    = parseFloat(((high + crit) / vals.length * 100).toFixed(1));
+    const pctRgb = pct > 50 ? 'B71C1C' : pct > 25 ? 'E65100' : pct > 10 ? 'F9A825' : '2E7D32';
+    const barLen = Math.round(pct / 5); // 0-20 blocks
+    const bar    = '█'.repeat(barLen) + '░'.repeat(20 - barLen);
+
+    setCell(row, 0, { t: 's', v: reg.label, s: { font: { bold: true } } });
+    setCell(row, 1, numCell(low,    '2E7D32'));
+    setCell(row, 2, numCell(medium, 'F9A825'));
+    setCell(row, 3, numCell(high,   'E65100'));
+    setCell(row, 4, numCell(crit,   'B71C1C'));
+    setCell(row, 5, { t: 'n', v: pct,  s: { ...solidFill(pctRgb), font: { bold: true, color: { rgb: 'FFFFFF' } } } });
+    setCell(row, 6, { t: 's', v: bar,  s: { font: { name: 'Consolas', sz: 9, color: { rgb: pctRgb } } } });
+    row++;
+  });
+
+  row += 2;
+
+  // ── Section 2: Chokepoint frequency ───────────────────────────────────────
+  setCell(row, 0, hdr('🔴  Top Chokepoint Frequency', '0D0A04', 'FFC107'));
+  row++;
+
+  const cpCols = ['Chokepoint', 'Times #1 Risk', '% of Snapshots', 'Bar'];
+  cpCols.forEach((h, ci) => setCell(row, ci, hdr(h, '2C1C08')));
+  row++;
+
+  const cpCounts: Record<string, number> = {};
+  history.forEach(s => { cpCounts[s.topChokepoint] = (cpCounts[s.topChokepoint] || 0) + 1; });
+  Object.entries(cpCounts)
+    .sort(([, a], [, b]) => b - a)
+    .forEach(([cp, count]) => {
+      const pct    = parseFloat((count / history.length * 100).toFixed(1));
+      const rgb    = pct > 50 ? 'B71C1C' : pct > 25 ? 'E65100' : pct > 10 ? 'F9A825' : '2E7D32';
+      const barLen = Math.round(pct / 5);
+      const bar    = '█'.repeat(barLen) + '░'.repeat(20 - barLen);
+
+      setCell(row, 0, { t: 's', v: cp });
+      setCell(row, 1, numCell(count, rgb));
+      setCell(row, 2, { t: 'n', v: pct, s: { ...solidFill(rgb), font: { color: { rgb: 'FFFFFF' } } } });
+      setCell(row, 3, { t: 's', v: bar, s: { font: { name: 'Consolas', sz: 9, color: { rgb: rgb } } } });
+      row++;
+    });
+
+  row += 2;
+
+  // ── Section 3: Top-risk snapshots (worst 10 moments) ──────────────────────
+  setCell(row, 0, hdr('⚠️  Top 10 Highest-Risk Snapshots', '0D0A04', 'FFC107'));
+  row++;
+
+  const worstCols = ['Timestamp', 'Avg Risk Index', 'Worst Region', 'Worst Value', 'Top Chokepoint'];
+  worstCols.forEach((h, ci) => setCell(row, ci, hdr(h, '2C1C08')));
+  row++;
+
+  const regionKeys: (keyof Snapshot)[] = ['riskAsia', 'riskME', 'riskAfrica', 'riskAmericas', 'riskOceania'];
+  const regionLabels: Record<string, string> = {
+    riskAsia: 'Asia-Pac', riskME: 'M. East', riskAfrica: 'Africa', riskAmericas: 'Americas', riskOceania: 'Oceania',
+  };
+
+  history.slice()
+    .map(s => {
+      const riskVals = regionKeys.map(k => s[k] as number);
+      const avgRisk  = riskVals.reduce((a, b) => a + b, 0) / riskVals.length;
+      const maxIdx   = riskVals.indexOf(Math.max(...riskVals));
+      return { s, avgRisk, worstKey: regionKeys[maxIdx], worstVal: riskVals[maxIdx] };
+    })
+    .sort((a, b) => b.avgRisk - a.avgRisk)
+    .slice(0, 10)
+    .forEach(({ s, avgRisk, worstKey, worstVal }) => {
+      const rgb = numericRGB(avgRisk);
+      setCell(row, 0, { t: 's', v: s.label });
+      setCell(row, 1, numCell(parseFloat(avgRisk.toFixed(1)), rgb));
+      setCell(row, 2, { t: 's', v: regionLabels[worstKey as string] });
+      setCell(row, 3, numCell(worstVal, numericRGB(worstVal)));
+      setCell(row, 4, { t: 's', v: s.topChokepoint });
+      row++;
+    });
+
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: row, c: 6 } });
+  ws['!cols'] = [{ wch: 26 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 24 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Event Summary');
+}
+
 export function downloadXLSX(history: Snapshot[]): void {
   if (!history.length) return;
   const rows = toRows(history);
@@ -250,6 +467,8 @@ export function downloadXLSX(history: Snapshot[]): void {
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'SCI History');
+  buildTrendsSheet(history, wb);
+  buildEventSheet(history, wb);
   XLSX.writeFile(wb, 'sci-terminal-history.xlsx', { cellStyles: true });
 }
 
