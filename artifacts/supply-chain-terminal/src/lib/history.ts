@@ -125,6 +125,14 @@ function toRows(history: Snapshot[]) {
   }));
 }
 
+function dateStamp(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export function downloadCSV(history: Snapshot[]): void {
   if (!history.length) return;
   const rows = toRows(history);
@@ -133,7 +141,7 @@ export function downloadCSV(history: Snapshot[]): void {
     headers.join(','),
     ...rows.map(r => headers.map(h => JSON.stringify((r as any)[h] ?? '')).join(','))
   ].join('\n');
-  trigger(new Blob([csv], { type: 'text/csv' }), 'sci-terminal-history.csv');
+  trigger(new Blob([csv], { type: 'text/csv' }), `Supplyside(${dateStamp()}).csv`);
 }
 
 // ─── XLSX conditional-format helpers ────────────────────────────────────────
@@ -469,7 +477,7 @@ export function downloadXLSX(history: Snapshot[]): void {
   XLSX.utils.book_append_sheet(wb, ws, 'SCI History');
   buildTrendsSheet(history, wb);
   buildEventSheet(history, wb);
-  XLSX.writeFile(wb, 'sci-terminal-history.xlsx', { cellStyles: true });
+  XLSX.writeFile(wb, `Supplyside(${dateStamp()}).xlsx`, { cellStyles: true });
 }
 
 function trigger(blob: Blob, filename: string): void {
