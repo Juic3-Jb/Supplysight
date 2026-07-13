@@ -1,9 +1,16 @@
 import { PORTS, ROUTES, CHOKE_POINTS, REGIONS } from '@/data/geo';
 
+// World-view center longitude (°). 120 = SE Asia / Australia in the middle.
+const WORLD_CENTER_LON = 120;
+
 function makeProj(w: number, h: number, box: number[] | null) {
-  // World view: nudge the whole map down so it isn't crowded against the top edge
-  // now that Antarctica's empty band at the bottom is gone.
-  if (!box) return (lon: number, lat: number) => ({ x: ((lon + 180) / 360) * w, y: ((90 - lat) / 180) * h + h * 0.07 });
+  // World view: centered on WORLD_CENTER_LON using modulo so the projection
+  // wraps cleanly. Nudged down slightly so content isn't crowded at the top
+  // now that Antarctica's empty southern band is gone.
+  if (!box) return (lon: number, lat: number) => ({
+    x: ((lon - WORLD_CENTER_LON + 180 + 360) % 360) / 360 * w,
+    y: ((90 - lat) / 180) * h + h * 0.07
+  });
   const [loMin, loMax, laMin, laMax] = box;
   return (lon: number, lat: number) => ({ x: ((lon - loMin) / (loMax - loMin)) * w, y: ((laMax - lat) / (laMax - laMin)) * h });
 }
@@ -41,12 +48,31 @@ function isDegenerateRing(pts: {x: number, y: number}[]) {
   return Math.abs(area / 2) < 0.5;
 }
 
-function smoothPath(ctx: CanvasRenderingContext2D, rawPts: {x: number, y: number}[]) {
-  if (!rawPts || !rawPts.length || isDegenerateRing(rawPts)) return;
+// Split projected points into segments wherever consecutive x-values jump more than
+// half the canvas width — that signals an antimeridian crossing in the shifted projection.
+function splitAtWrap(pts: {x: number, y: number}[], w: number): {x: number, y: number}[][] {
+  const segs: {x: number, y: number}[][] = [];
+  let seg: {x: number, y: number}[] = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    if (Math.abs(pts[i].x - pts[i - 1].x) > w / 2) {
+      if (seg.length > 1) segs.push(seg);
+      seg = [pts[i]];
+    } else {
+      seg.push(pts[i]);
+    }
+  }
+  if (seg.length > 1) segs.push(seg);
+  return segs;
+}
+
+// Draw a smooth closed polygon (open=false, default) or open polyline (open=true).
+function smoothPath(ctx: CanvasRenderingContext2D, rawPts: {x: number, y: number}[], open = false) {
+  if (!rawPts || !rawPts.length) return;
+  if (!open && isDegenerateRing(rawPts)) return;
   if (rawPts.length < 3) {
     ctx.beginPath();
     rawPts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
-    ctx.closePath();
+    if (!open) ctx.closePath();
     return;
   }
   // Real coastline data already carries natural detail; a single light pass just
@@ -54,12 +80,21 @@ function smoothPath(ctx: CanvasRenderingContext2D, rawPts: {x: number, y: number
   const pts = chaikinSmooth(rawPts, 1);
   ctx.beginPath();
   const n = pts.length;
-  ctx.moveTo((pts[n - 1].x + pts[0].x) / 2, (pts[n - 1].y + pts[0].y) / 2);
-  for (let i = 0; i < n; i++) {
-    const p0 = pts[i], p1 = pts[(i + 1) % n];
-    ctx.quadraticCurveTo(p0.x, p0.y, (p0.x + p1.x) / 2, (p0.y + p1.y) / 2);
+  if (open) {
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = pts[i], p1 = pts[i + 1];
+      ctx.quadraticCurveTo(p0.x, p0.y, (p0.x + p1.x) / 2, (p0.y + p1.y) / 2);
+    }
+    ctx.lineTo(pts[n - 1].x, pts[n - 1].y);
+  } else {
+    ctx.moveTo((pts[n - 1].x + pts[0].x) / 2, (pts[n - 1].y + pts[0].y) / 2);
+    for (let i = 0; i < n; i++) {
+      const p0 = pts[i], p1 = pts[(i + 1) % n];
+      ctx.quadraticCurveTo(p0.x, p0.y, (p0.x + p1.x) / 2, (p0.y + p1.y) / 2);
+    }
+    ctx.closePath();
   }
-  ctx.closePath();
 }
 
 export function drawMap(
@@ -126,57 +161,83 @@ export function drawMap(
     if (p.y >= 0 && p.y <= h) { ctx.beginPath(); ctx.moveTo(0, p.y); ctx.lineTo(w, p.y); ctx.stroke(); }
   }
   
-  // Topographic land
-  LAND.forEach((coords, idx) => {
-    const pts = coords.map(([lo, la]) => P(lo, la));
+  // Helper: draw one land segment (closed or open at wrap edges) with full glow/fill/coast
+  function drawLandSeg(c: CanvasRenderingContext2D, segPts: {x: number, y: number}[], open: boolean) {
     let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
-    pts.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); });
-    if (maxX < -50 || minX > w + 50 || maxY < -50 || minY > h + 50) return; // cull offscreen
-    
-    smoothPath(ctx, pts);
-    ctx.save();
-    ctx.shadowColor = 'rgba(220, 140, 50, 0.5)';
-    ctx.shadowBlur = 7;
-    ctx.strokeStyle = 'rgba(230, 160, 70, 0.3)';
-    ctx.lineWidth = 3;
-    ctx.lineJoin = 'round';
-    ctx.stroke();
-    ctx.restore();
-    
-    smoothPath(ctx, pts);
-    const tg = ctx.createLinearGradient(minX, minY, maxX, maxY);
+    segPts.forEach(p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); });
+    if (maxX < -50 || minX > w + 50 || maxY < -50 || minY > h + 50) return;
+
+    smoothPath(c, segPts, open);
+    c.save();
+    c.shadowColor = 'rgba(220, 140, 50, 0.5)';
+    c.shadowBlur = 7;
+    c.strokeStyle = 'rgba(230, 160, 70, 0.3)';
+    c.lineWidth = 3;
+    c.lineJoin = 'round';
+    c.stroke();
+    c.restore();
+
+    smoothPath(c, segPts, open);
+    const tg = c.createLinearGradient(minX, minY, maxX, maxY);
     tg.addColorStop(0, '#1c140a');
     tg.addColorStop(0.4, '#261c10');
     tg.addColorStop(0.7, '#2f2214');
     tg.addColorStop(1, '#3a2a18');
-    ctx.fillStyle = tg;
-    ctx.fill();
-    
-    ctx.save();
-    ctx.clip();
-    const hs = ctx.createLinearGradient(minX, minY, maxX, maxY);
+    c.fillStyle = tg;
+    c.fill();
+
+    c.save();
+    c.clip();
+    const hs = c.createLinearGradient(minX, minY, maxX, maxY);
     hs.addColorStop(0, 'rgba(210, 160, 90, 0.15)');
     hs.addColorStop(0.5, 'transparent');
     hs.addColorStop(1, 'rgba(0, 0, 0, 0.4)');
-    ctx.fillStyle = hs;
-    ctx.fillRect(minX, minY, Math.max(maxX - minX, 1), Math.max(maxY - minY, 1));
-    ctx.restore();
-    
-    smoothPath(ctx, pts);
-    ctx.strokeStyle = 'rgba(240, 190, 110, 0.4)';
-    ctx.lineWidth = 0.7;
-    ctx.lineJoin = 'round';
-    ctx.stroke();
+    c.fillStyle = hs;
+    c.fillRect(minX, minY, Math.max(maxX - minX, 1), Math.max(maxY - minY, 1));
+    c.restore();
+
+    smoothPath(c, segPts, open);
+    c.strokeStyle = 'rgba(240, 190, 110, 0.4)';
+    c.lineWidth = 0.7;
+    c.lineJoin = 'round';
+    c.stroke();
+  }
+
+  // Need a non-null ref for the nested helper and lake loops below
+  const cx = ctx as CanvasRenderingContext2D;
+
+  // Topographic land — split rings at the wrap meridian so there are no stray
+  // horizontal lines across the map when using a non-zero center longitude.
+  LAND.forEach(coords => {
+    const pts = coords.map(([lo, la]) => P(lo, la));
+    if (!zoomBox) {
+      const segs = splitAtWrap(pts, w);
+      const open = segs.length > 1; // ring was split → draw segments open at their ends
+      segs.forEach(seg => drawLandSeg(cx, seg, open));
+    } else {
+      drawLandSeg(cx, pts, false);
+    }
   });
-  
+
   LAKES.forEach(coords => {
     const pts = coords.map(([lo, la]) => P(lo, la));
-    smoothPath(ctx, pts);
-    ctx.fillStyle = '#0a0602';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(230, 160, 70, 0.3)';
-    ctx.lineWidth = 0.5;
-    ctx.stroke();
+    if (!zoomBox) {
+      splitAtWrap(pts, w).forEach(seg => {
+        smoothPath(cx, seg, true);
+        cx.fillStyle = '#0a0602';
+        cx.fill();
+        cx.strokeStyle = 'rgba(230, 160, 70, 0.3)';
+        cx.lineWidth = 0.5;
+        cx.stroke();
+      });
+    } else {
+      smoothPath(cx, pts);
+      cx.fillStyle = '#0a0602';
+      cx.fill();
+      cx.strokeStyle = 'rgba(230, 160, 70, 0.3)';
+      cx.lineWidth = 0.5;
+      cx.stroke();
+    }
   });
 
   // Corridors
@@ -200,6 +261,8 @@ export function drawMap(
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = 0; i < pts.length - 1; i++) {
+      // Skip segment if it crosses the wrap meridian (stray line across the map)
+      if (Math.abs(pts[i + 1].x - pts[i].x) > w / 2) { ctx.moveTo(pts[i + 1].x, pts[i + 1].y); continue; }
       const mx = (pts[i].x + pts[i + 1].x) / 2;
       const my = (pts[i].y + pts[i + 1].y) / 2;
       ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
