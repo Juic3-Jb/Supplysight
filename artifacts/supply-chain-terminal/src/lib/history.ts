@@ -136,14 +136,121 @@ export function downloadCSV(history: Snapshot[]): void {
   trigger(new Blob([csv], { type: 'text/csv' }), 'sci-terminal-history.csv');
 }
 
+// ─── XLSX conditional-format helpers ────────────────────────────────────────
+
+/** 0-100 risk / delay index: ≤40 green, 41-70 amber, 71-85 orange, >85 red */
+function numericRGB(v: number): string {
+  if (v <= 40) return '2E7D32'; // dark green
+  if (v <= 70) return 'F9A825'; // amber
+  if (v <= 85) return 'E65100'; // deep orange
+  return 'B71C1C';              // dark red
+}
+
+/** Capacity %: high utilisation = bad (opposite of risk) */
+function capacityRGB(v: number): string {
+  if (v <= 70) return '2E7D32';
+  if (v <= 85) return 'F9A825';
+  return 'B71C1C';
+}
+
+/** Carrier avg delay days: 0 = fine, 1-3 = watch, >3 = bad */
+function delayDaysRGB(v: number): string {
+  if (v <= 0) return '2E7D32';
+  if (v <= 3) return 'F9A825';
+  return 'B71C1C';
+}
+
+/** Text risk level (low / medium / high / critical) */
+function riskTextRGB(s: string): string {
+  switch (s.toLowerCase()) {
+    case 'low':      return '2E7D32';
+    case 'medium':   return 'F9A825';
+    case 'high':     return 'E65100';
+    case 'critical': return 'B71C1C';
+    default:         return '616161';
+  }
+}
+
+function makeCell(value: unknown): XLSX.CellObject {
+  if (typeof value === 'number') return { t: 'n', v: value };
+  return { t: 's', v: String(value ?? '') };
+}
+
+function solidFill(rgb: string) {
+  return { fill: { patternType: 'solid' as const, fgColor: { rgb } } };
+}
+
 export function downloadXLSX(history: Snapshot[]): void {
   if (!history.length) return;
-  const ws = XLSX.utils.json_to_sheet(toRows(history));
-  // Column widths
-  ws['!cols'] = Object.keys(toRows(history)[0]).map(k => ({ wch: Math.max(k.length, 12) }));
+  const rows = toRows(history);
+  const headers = Object.keys(rows[0]) as (keyof ReturnType<typeof toRows>[0])[];
+
+  // Column-type map: which style function applies to each column
+  const NUM_RISK_COLS = new Set([
+    'Risk — Asia-Pacific', 'Risk — Middle East', 'Risk — Africa',
+    'Risk — Americas', 'Risk — Oceania',
+    'Delay — Ocean', 'Delay — Air', 'Delay — Rail', 'Delay — River',
+    'Commodity — Autos', 'Commodity — Raw Mat.', 'Commodity — Nat. Gas',
+    'Commodity — Fossil Fuels', 'Commodity — Consumer', 'Commodity — Agri',
+  ]);
+
+  // Build worksheet manually so we can attach cell.s styles
+  const wsData: { [addr: string]: XLSX.CellObject } = {};
+
+  // Header row (row 0)
+  headers.forEach((h, ci) => {
+    const addr = XLSX.utils.encode_cell({ r: 0, c: ci });
+    wsData[addr] = {
+      t: 's', v: h,
+      s: {
+        fill: { patternType: 'solid', fgColor: { rgb: '1A1208' } },
+        font: { bold: true, color: { rgb: 'FFC107' } },
+        alignment: { wrapText: true },
+      },
+    };
+  });
+
+  // Data rows
+  rows.forEach((row, ri) => {
+    headers.forEach((col, ci) => {
+      const addr = XLSX.utils.encode_cell({ r: ri + 1, c: ci });
+      const val = (row as Record<string, unknown>)[col];
+      const cell = makeCell(val);
+
+      const evenRow = ri % 2 === 1;
+      const baseBg = evenRow ? 'F5F0E8' : 'FFFFFF';
+
+      if (NUM_RISK_COLS.has(col) && typeof val === 'number') {
+        const rgb = numericRGB(val);
+        cell.s = { ...solidFill(rgb), font: { bold: true, color: { rgb: 'FFFFFF' } } };
+      } else if (col === 'Carrier Avg Capacity (%)' && typeof val === 'number') {
+        const rgb = capacityRGB(val);
+        cell.s = { ...solidFill(rgb), font: { bold: true, color: { rgb: 'FFFFFF' } } };
+      } else if (col === 'Carrier Avg Delay (d)' && typeof val === 'number') {
+        const rgb = delayDaysRGB(val);
+        cell.s = { ...solidFill(rgb), font: { bold: true, color: { rgb: 'FFFFFF' } } };
+      } else if (col === 'Top Chokepoint Risk') {
+        const rgb = riskTextRGB(String(val));
+        cell.s = { ...solidFill(rgb), font: { bold: true, color: { rgb: 'FFFFFF' } } };
+      } else {
+        cell.s = { fill: { patternType: 'solid', fgColor: { rgb: baseBg } } };
+      }
+
+      wsData[addr] = cell;
+    });
+  });
+
+  // Sheet range
+  const ref = XLSX.utils.encode_range({
+    s: { r: 0, c: 0 },
+    e: { r: rows.length, c: headers.length - 1 },
+  });
+  const ws: XLSX.WorkSheet = { ...wsData, '!ref': ref };
+  ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 14) }));
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'SCI History');
-  XLSX.writeFile(wb, 'sci-terminal-history.xlsx');
+  XLSX.writeFile(wb, 'sci-terminal-history.xlsx', { cellStyles: true });
 }
 
 function trigger(blob: Blob, filename: string): void {
