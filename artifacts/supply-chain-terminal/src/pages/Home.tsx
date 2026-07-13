@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { drawMap } from "@/lib/mapRenderer";
 import { generateSimulatedData, getRiskColor, getTrendColor } from "@/lib/simulation";
 import { generateMockPortDetail, generateMockThreatDetail } from "@/lib/mockData";
+import { buildSnapshot, loadHistory, saveSnapshot, clearHistory, downloadCSV, downloadXLSX, type Snapshot } from "@/lib/history";
 import { PORTS, ROUTES, CHOKE_POINTS, REGIONS, LAND, LAKES } from "@/data/geo";
 import { Loader2, RefreshCw, TerminalSquare, AlertTriangle, Radio, Activity, Clock, ShieldAlert, Navigation } from "lucide-react";
 
@@ -29,6 +30,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("matrix");
   const [newsFilter, setNewsFilter] = useState("all");
   const [zoomRegion, setZoomRegion] = useState<any>(null);
+  const [history, setHistory] = useState<Snapshot[]>(() => loadHistory());
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number | null>(null);
@@ -39,6 +41,13 @@ export default function Home() {
   useEffect(() => { srRef.current = selRoute; }, [selRoute]);
   useEffect(() => { tlRef.current = timelineDay; }, [timelineDay]);
   useEffect(() => { zoomRef.current = zoomRegion ? zoomRegion.box : null; }, [zoomRegion]);
+
+  // Auto-snapshot whenever live data refreshes
+  useEffect(() => {
+    if (!data) return;
+    const snap = buildSnapshot(data);
+    setHistory(saveSnapshot(snap));
+  }, [data]);
 
   useEffect(() => {
     const c = canvasRef.current;
@@ -577,10 +586,11 @@ export default function Home() {
               ['matrix', 'COMMODITY'],
               ['freight', 'FREIGHT'],
               ['strategic', 'STRATEGIC'],
-              ['weather', 'WEATHER']
+              ['weather', 'WEATHER'],
+              ['history', 'HISTORY']
             ].map(([k, lbl]) => (
               <button key={k} onClick={() => setActiveTab(k)} 
-                className={`px-3 py-1 text-[10px] tracking-widest uppercase transition-colors ${activeTab === k ? 'text-primary font-bold border-b-2 border-primary' : 'text-primary/50 hover:text-primary/80 border-b-2 border-transparent'}`}>
+                className={`px-3 py-1 text-[10px] tracking-widest uppercase transition-colors flex-none ${activeTab === k ? 'text-primary font-bold border-b-2 border-primary' : 'text-primary/50 hover:text-primary/80 border-b-2 border-transparent'}`}>
                 {lbl}
               </button>
             ))}
@@ -668,6 +678,79 @@ export default function Home() {
                     <div className="text-[10px] text-primary/60">{wx.portImpact}</div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {activeTab === 'history' && (
+              <div className="flex flex-col h-full gap-2">
+                {/* Action bar */}
+                <div className="flex items-center gap-1.5 flex-none">
+                  <span className="text-[9px] text-primary/50 uppercase tracking-widest mr-auto">
+                    {history.length} snapshot{history.length !== 1 ? 's' : ''} stored
+                  </span>
+                  <button
+                    onClick={() => { if (data) { const s = buildSnapshot(data); setHistory(saveSnapshot(s)); } }}
+                    className="px-2 py-1 text-[8px] uppercase tracking-widest border border-primary/30 text-primary/70 rounded hover:bg-primary/10 transition-colors">
+                    ⊕ Snapshot
+                  </button>
+                  <button
+                    onClick={() => downloadCSV(history)}
+                    disabled={!history.length}
+                    className="px-2 py-1 text-[8px] uppercase tracking-widest border border-primary/30 text-primary/70 rounded hover:bg-primary/10 transition-colors disabled:opacity-30">
+                    ↓ CSV
+                  </button>
+                  <button
+                    onClick={() => downloadXLSX(history)}
+                    disabled={!history.length}
+                    className="px-2 py-1 text-[8px] uppercase tracking-widest border border-[#4ade80]/40 text-[#4ade80]/80 rounded hover:bg-[#4ade80]/10 transition-colors disabled:opacity-30">
+                    ↓ XLSX
+                  </button>
+                  <button
+                    onClick={() => { clearHistory(); setHistory([]); }}
+                    disabled={!history.length}
+                    className="px-2 py-1 text-[8px] uppercase tracking-widest border border-destructive/30 text-destructive/60 rounded hover:bg-destructive/10 transition-colors disabled:opacity-30">
+                    ✕ Clear
+                  </button>
+                </div>
+                {/* Snapshot table */}
+                {history.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center text-[10px] text-primary/30 uppercase tracking-widest">No history yet — data snapshots will appear here</div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto scrollbar-none">
+                    <table className="w-full text-left border-collapse text-[8.5px]">
+                      <thead className="sticky top-0 bg-[#0a0602] z-10">
+                        <tr className="text-primary/40 uppercase tracking-widest border-b border-primary/15">
+                          <th className="pb-1 font-normal pr-2 whitespace-nowrap">Time</th>
+                          <th className="pb-1 font-normal pr-2 text-right whitespace-nowrap">Asia</th>
+                          <th className="pb-1 font-normal pr-2 text-right whitespace-nowrap">M.East</th>
+                          <th className="pb-1 font-normal pr-2 text-right whitespace-nowrap">Africa</th>
+                          <th className="pb-1 font-normal pr-2 text-right whitespace-nowrap">Americas</th>
+                          <th className="pb-1 font-normal pr-2 text-right whitespace-nowrap">Sea Dly</th>
+                          <th className="pb-1 font-normal pr-2 text-right whitespace-nowrap">Air Dly</th>
+                          <th className="pb-1 font-normal pr-2 text-right whitespace-nowrap">Avg Cap</th>
+                          <th className="pb-1 font-normal pr-2 whitespace-nowrap">Top Choke</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {history.map((s, i) => (
+                          <tr key={s.id} className={`border-b border-primary/5 hover:bg-white/[0.03] transition-colors ${i === 0 ? 'text-primary/90' : 'text-primary/55'}`}>
+                            <td className="py-1 pr-2 font-mono whitespace-nowrap">{s.label}</td>
+                            <td className="py-1 pr-2 text-right font-bold" style={{ color: getRiskColor(s.riskAsia) }}>{s.riskAsia}</td>
+                            <td className="py-1 pr-2 text-right font-bold" style={{ color: getRiskColor(s.riskME) }}>{s.riskME}</td>
+                            <td className="py-1 pr-2 text-right font-bold" style={{ color: getRiskColor(s.riskAfrica) }}>{s.riskAfrica}</td>
+                            <td className="py-1 pr-2 text-right font-bold" style={{ color: getRiskColor(s.riskAmericas) }}>{s.riskAmericas}</td>
+                            <td className="py-1 pr-2 text-right" style={{ color: getRiskColor(s.delaySea) }}>{s.delaySea}</td>
+                            <td className="py-1 pr-2 text-right" style={{ color: getRiskColor(s.delayAir) }}>{s.delayAir}</td>
+                            <td className="py-1 pr-2 text-right" style={{ color: getRiskColor(s.carrierAvgCap) }}>{s.carrierAvgCap}%</td>
+                            <td className="py-1 pr-2 whitespace-nowrap">
+                              <span style={{ color: getRiskColor(s.topChokepointRisk) }}>{s.topChokepoint}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>
