@@ -273,16 +273,16 @@ export default function Home() {
       </div>
 
       {/* Main Grid */}
-      <div className="flex-1 min-h-0 grid grid-cols-[260px_1fr_300px] gap-[1px] bg-primary/20">
+      <div className="flex-1 min-h-0 grid grid-cols-[200px_1fr_300px] gap-[1px] bg-primary/20">
         
-        {/* Left Col: Risk & Delay */}
+        {/* Left Col: Risk & Delay — slimmed */}
         <div className="bg-background flex flex-col overflow-hidden">
           <div className="h-8 flex-none bg-[#110a05] border-b border-primary/10 flex items-center px-3 text-[10px] font-bold text-primary tracking-widest uppercase">
-            ▸ Regional Risk Index
+            ▸ Risk Index
           </div>
-          <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-4 scrollbar-none">
+          <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-3 scrollbar-none">
             
-            <div className="space-y-3">
+            <div className="space-y-2">
               {[
                 { l: 'Asia-Pacific', v: data.risks.asia },
                 { l: 'Middle East', v: data.risks.me },
@@ -291,44 +291,44 @@ export default function Home() {
                 { l: 'Oceania', v: data.risks.oceania }
               ].map(r => (
                 <div key={r.l}>
-                  <div className="flex justify-between items-end mb-1 text-[10px]">
+                  <div className="flex justify-between items-center mb-0.5 text-[9px]">
                     <span className="text-primary/70">{r.l}</span>
-                    <span className="font-bold text-[12px]" style={{color: getRiskColor(r.v)}}>{r.v}<span className="text-[9px] text-primary/40 font-normal">/100</span></span>
+                    <span className="font-bold text-[11px]" style={{color: getRiskColor(r.v)}}>{r.v}<span className="text-[8px] text-primary/40 font-normal">/100</span></span>
                   </div>
-                  <div className="h-1.5 bg-black rounded-full overflow-hidden border border-primary/10">
-                    <div className="h-full rounded-full transition-all duration-1000 shadow-[0_0_8px_currentcolor]" style={{ width: `${r.v}%`, backgroundColor: getRiskColor(r.v) }} />
+                  <div className="h-1 bg-black rounded-full overflow-hidden border border-primary/10">
+                    <div className="h-full rounded-full transition-all duration-1000 shadow-[0_0_6px_currentcolor]" style={{ width: `${r.v}%`, backgroundColor: getRiskColor(r.v) }} />
                   </div>
                 </div>
               ))}
             </div>
             
-            <div className="pt-3 border-t border-primary/10 space-y-2">
-              <div className="text-[10px] font-bold text-primary/80 tracking-widest mb-3 uppercase">▸ Chokepoint Status</div>
+            <div className="pt-2 border-t border-primary/10 space-y-1.5">
+              <div className="text-[9px] font-bold text-primary/80 tracking-widest mb-2 uppercase">▸ Chokepoints</div>
               {data.chokepoints.map((cp: any, i: number) => (
-                <div key={i} className="p-2 rounded bg-black/40 border-l-2" style={{ borderColor: getRiskColor(cp.riskLevel) }}>
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-[10px] font-bold text-primary/90">{cp.name}</span>
-                    <span className="text-[9px] font-bold" style={{color: getRiskColor(cp.riskLevel)}}>{cp.riskLevel.toUpperCase()}</span>
+                <div key={i} className="px-2 py-1.5 rounded bg-black/40 border-l-2" style={{ borderColor: getRiskColor(cp.riskLevel) }}>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[9px] font-bold text-primary/90 leading-tight">{cp.name}</span>
+                    <span className="text-[8px] font-bold ml-1 shrink-0" style={{color: getRiskColor(cp.riskLevel)}}>{cp.riskLevel.toUpperCase()}</span>
                   </div>
-                  <div className="flex justify-between items-start">
-                    <span className="text-[9px] text-primary/60 max-w-[70%]">{cp.notes}</span>
-                    {cp.addedDelayDays > 0 && <span className="text-[10px] font-bold text-[#ff9020]">+{cp.addedDelayDays}d</span>}
+                  <div className="flex justify-between items-center mt-0.5">
+                    <span className="text-[8px] text-primary/50 truncate max-w-[70%]">{cp.notes}</span>
+                    {cp.addedDelayDays > 0 && <span className="text-[9px] font-bold text-[#ff9020] shrink-0">+{cp.addedDelayDays}d</span>}
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="pt-3 border-t border-primary/10 space-y-2 pb-2">
-              <div className="text-[10px] font-bold text-primary/80 tracking-widest mb-2 uppercase">▸ Delay Index (Mode)</div>
+            <div className="pt-2 border-t border-primary/10 space-y-1 pb-2">
+              <div className="text-[9px] font-bold text-primary/80 tracking-widest mb-1.5 uppercase">▸ Delay Index</div>
               {[
                 { l: 'Ocean', v: data.delayIdx.sea },
                 { l: 'Air', v: data.delayIdx.air },
                 { l: 'Rail', v: data.delayIdx.rail },
-                { l: 'River (MS)', v: data.delayIdx.river }
+                { l: 'River', v: data.delayIdx.river }
               ].map(d => (
-                <div key={d.l} className="flex justify-between items-center bg-black/20 p-1.5 rounded border border-primary/5">
-                  <span className="text-[10px] text-primary/70">{d.l}</span>
-                  <span className="text-[11px] font-bold" style={{color: getRiskColor(d.v)}}>{d.v}</span>
+                <div key={d.l} className="flex justify-between items-center bg-black/20 px-2 py-1 rounded border border-primary/5">
+                  <span className="text-[9px] text-primary/70">{d.l}</span>
+                  <span className="text-[10px] font-bold" style={{color: getRiskColor(d.v)}}>{d.v}</span>
                 </div>
               ))}
             </div>
@@ -342,20 +342,22 @@ export default function Home() {
             <span>▸ Global Network — Live Overlay {zoomRegion ? `— ${zoomRegion.n}` : ''}</span>
             <span className="text-[9px] text-primary/50 font-normal normal-case flex items-center gap-2"><Navigation className="w-3 h-3"/> Click nodes & ⚠ threats</span>
           </div>
-          
-          <div className="absolute top-10 left-3 right-3 flex justify-between items-start z-10 pointer-events-none">
-            <div className="flex gap-1 bg-black/60 backdrop-blur p-1 rounded border border-primary/20 pointer-events-auto">
-              <span className="text-[9px] text-primary/50 px-2 py-1 flex items-center">ZOOM:</span>
-              <button onClick={() => setZoomRegion(null)} className={`px-2 py-1 rounded text-[9px] transition-colors ${!zoomRegion ? 'bg-primary text-black font-bold' : 'text-primary/70 hover:bg-primary/20'}`}>WORLD</button>
+
+          {/* Map body: zoom sidebar + canvas side by side */}
+          <div className="flex-1 flex min-h-0">
+            {/* Zoom sidebar — sits beside the map, never over it */}
+            <div className="flex-none w-[62px] border-r border-primary/10 bg-[#0a0602] flex flex-col items-stretch gap-0.5 py-1.5 px-1">
+              <div className="text-[7px] text-primary/40 tracking-widest text-center mb-1 uppercase">Zoom</div>
+              <button onClick={() => setZoomRegion(null)} className={`px-1 py-1.5 rounded text-[8px] leading-tight transition-colors text-center ${!zoomRegion ? 'bg-primary text-black font-bold' : 'text-primary/60 hover:bg-primary/20'}`}>WORLD</button>
               {REGIONS.map((rg: any) => (
-                <button key={rg.id} onClick={() => setZoomRegion(zoomRegion?.id === rg.id ? null : rg)} className={`px-2 py-1 rounded text-[9px] transition-colors ${zoomRegion?.id === rg.id ? 'bg-primary text-black font-bold' : 'text-primary/70 hover:bg-primary/20'}`}>
+                <button key={rg.id} onClick={() => setZoomRegion(zoomRegion?.id === rg.id ? null : rg)} className={`px-1 py-1.5 rounded text-[8px] leading-tight transition-colors text-center ${zoomRegion?.id === rg.id ? 'bg-primary text-black font-bold' : 'text-primary/60 hover:bg-primary/20'}`}>
                   {rg.n}
                 </button>
               ))}
             </div>
-          </div>
 
-          <canvas ref={canvasRef} onClick={handleCanvasClick} className="w-full flex-1 block cursor-crosshair" />
+            <canvas ref={canvasRef} onClick={handleCanvasClick} className="flex-1 block cursor-crosshair" />
+          </div>
 
           {/* Threat Popup */}
           {threatInfo && (
