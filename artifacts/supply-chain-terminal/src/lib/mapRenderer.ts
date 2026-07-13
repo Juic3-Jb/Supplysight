@@ -1,7 +1,7 @@
 import { PORTS, ROUTES, CHOKE_POINTS, REGIONS } from '@/data/geo';
 
-// World-view center longitude (°). 120 = SE Asia / Australia in the middle.
-const WORLD_CENTER_LON = 120;
+// World-view center longitude (°). 0 = standard view, all regions visible.
+const WORLD_CENTER_LON = 0;
 
 function makeProj(w: number, h: number, box: number[] | null) {
   // World view: centered on WORLD_CENTER_LON using modulo so the projection
