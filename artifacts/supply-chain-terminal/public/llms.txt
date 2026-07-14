@@ -1,0 +1,26 @@
+# Global Supply Chain Intelligence Terminal
+
+A client-side interactive terminal for monitoring global supply chain risk in real time.
+
+## Purpose
+The Global Supply Chain Intelligence Terminal provides supply chain professionals, analysts, and researchers with a unified view of geopolitical risk, shipping delays, port congestion, commodity disruptions, and carrier performance across all major global trade corridors.
+
+## Capabilities
+- Real-time risk indices across Asia-Pacific, Middle East, Africa, Americas, and Oceania
+- Chokepoint risk tracking: Suez Canal, Strait of Hormuz, Panama Canal, Strait of Malacca, Bosphorus, Mississippi River, English Channel
+- Port congestion, dwell time, and vessel queue intelligence for major global hubs
+- Shipping route simulation with delay forecasting across ocean, air, rail, and river modes
+- Commodity disruption tracking: automotive, raw materials, natural gas, fossil fuels, consumer goods, agriculture
+- Carrier capacity and average delay monitoring across major shipping lines
+- Global news feed filtered by region and impact severity
+- Snapshot history system with CSV and XLSX export including conditional formatting and linear-regression forecasts
+- Risk trend sparklines and event distribution summaries
+
+## Data Model
+Risk indices are expressed on a 0–100 scale. Values ≤ 40 indicate low risk (green), 41–70 moderate (amber), 71–85 elevated (orange), and > 85 critical (red). Delay indices use the same scale. Carrier capacity is expressed as a percentage utilisation; values > 85 % indicate strain.
+
+## Audience
+Supply chain managers, logistics analysts, procurement teams, trade finance professionals, and policy researchers monitoring global trade disruption.
+
+## Application Type
+Single-page web application (React + Vite). Fully client-side; all simulation runs in the browser with no external API calls required.
