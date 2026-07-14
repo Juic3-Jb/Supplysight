@@ -59,6 +59,90 @@
     </script>
   </head>
   <body>
+    <!--
+      Static content block for crawlers and social bots that do not execute JavaScript
+      (Facebook, LinkedIn, Slack, Discord, GPTBot, ClaudeBot, PerplexityBot, Applebot-Extended).
+      Hidden immediately by the inline script below; React mounts separately into #root.
+    -->
+    <div id="crawler-summary">
+      <header>
+        <h1>Global Supply Chain Intelligence Terminal</h1>
+        <p>
+          A real-time interactive terminal for monitoring global supply chain risk, shipping
+          chokepoints, port congestion, carrier performance, and trade corridor intelligence
+          across all major regions.
+        </p>
+      </header>
+
+      <section>
+        <h2>Regional Risk Indices</h2>
+        <p>
+          Live risk scores (0–100) across five regions: <strong>Asia-Pacific</strong>,
+          <strong>Middle East</strong>, <strong>Africa</strong>, <strong>Americas</strong>,
+          and <strong>Oceania</strong>. Scores above 85 trigger critical alerts.
+        </p>
+      </section>
+
+      <section>
+        <h2>Chokepoint Monitoring</h2>
+        <p>
+          Real-time risk status for the world's most strategically important maritime
+          passages: <strong>Suez Canal</strong>, <strong>Strait of Hormuz</strong>,
+          <strong>Panama Canal</strong>, <strong>Strait of Malacca</strong>,
+          <strong>Bosphorus Strait</strong>, <strong>English Channel</strong>,
+          and the <strong>Mississippi River</strong> inland corridor.
+        </p>
+      </section>
+
+      <section>
+        <h2>Port &amp; Carrier Intelligence</h2>
+        <p>
+          Vessel queue depth, average dwell time, and congestion status for major global
+          hub ports including Shanghai, Singapore, Rotterdam, Los Angeles, and Dubai.
+          Carrier capacity utilisation and average delay tracking across major shipping lines.
+        </p>
+      </section>
+
+      <section>
+        <h2>Shipping Route Delay Forecasting</h2>
+        <p>
+          Simulated delay indices for <strong>ocean</strong>, <strong>air</strong>,
+          <strong>rail</strong>, and <strong>river</strong> freight modes. Historical
+          snapshot export to CSV and XLSX with conditional formatting, metric sparklines,
+          linear-regression forecasts, and event distribution summaries.
+        </p>
+      </section>
+
+      <section>
+        <h2>Commodity Disruption Tracking</h2>
+        <p>
+          Impact scores for six commodity classes: <strong>automotive parts</strong>,
+          <strong>raw materials</strong>, <strong>natural gas</strong>,
+          <strong>fossil fuels</strong>, <strong>consumer goods</strong>, and
+          <strong>agricultural products</strong>.
+        </p>
+      </section>
+
+      <section>
+        <h2>Global News Intelligence Feed</h2>
+        <p>
+          Curated supply chain news filtered by region and impact severity, covering
+          Asia, the Middle East, Africa, and the Americas — updated on every scan cycle.
+        </p>
+      </section>
+
+      <footer>
+        <p>
+          Free to use. No account required. All simulation runs client-side in the browser.
+          Built for supply chain managers, logistics analysts, procurement teams, trade finance
+          professionals, and policy researchers.
+        </p>
+      </footer>
+    </div>
+
+    <!-- Hide static block immediately so JS users never see it -->
+    <script>document.getElementById('crawler-summary').style.display='none';</script>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
